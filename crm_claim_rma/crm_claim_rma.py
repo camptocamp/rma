@@ -30,6 +30,7 @@ from openerp.tools import (DEFAULT_SERVER_DATE_FORMAT,
                            DEFAULT_SERVER_DATETIME_FORMAT)
 from openerp.tools.translate import _
 from openerp import SUPERUSER_ID
+from collections import defaultdict
 
 
 class InvoiceNoDate(Exception):
@@ -236,6 +237,10 @@ class claim_line(orm.Model):
                        ('cancel','Cancelled')],
             string='Refund state',
             readonly=True),
+        'order_line_id': fields.many2one(
+            'sale.order.line',
+            string='Sale order line',
+            help='The sale order line related to the returned product'),
     }
 
     _defaults = {
@@ -507,7 +512,7 @@ class crm_claim(orm.Model):
             'invoice_ids': False,
             'picking_ids': False,
             'number': self._get_sequence_number(cr, uid, context=context),
-        }
+            }
         std_default.update(default)
         return super(crm_claim, self).copy_data(
             cr, uid, id, default=std_default, context=context)
@@ -539,7 +544,7 @@ class crm_claim(orm.Model):
         'picking_ids': fields.one2many('stock.picking', 'claim_id', 'RMA'),
         'invoice_id': fields.many2one(
             'account.invoice', string='Invoice',
-            help='Related original Cusotmer invoice'),
+            help='Related original Customer invoice'),
         'delivery_address_id': fields.many2one(
             'res.partner', string='Partner delivery address',
             help="This address will be used to deliver repaired or replacement"
@@ -547,6 +552,10 @@ class crm_claim(orm.Model):
         'warehouse_id': fields.many2one(
             'stock.warehouse', string='Warehouse',
             required=True),
+        'order_id': fields.many2one(
+            'sale.order',
+            string='Sale order',
+            help="Related original customer sale order"),
     }
 
     _defaults = {
@@ -577,116 +586,79 @@ class crm_claim(orm.Model):
                         res['value']['partner_phone'] = other_add.phone
         return res
 
-    def onchange_invoice_id(self, cr, uid, ids, invoice_id, warehouse_id,
-                            claim_type, claim_date, company_id, lines,
-                            create_lines=False, context=None):
-        invoice_line_obj = self.pool.get('account.invoice.line')
-        invoice_obj = self.pool.get('account.invoice')
-        product_obj = self.pool['product.product']
-        claim_line_obj = self.pool.get('claim.line')
-        company_obj = self.pool['res.company']
-        warehouse_obj = self.pool['stock.warehouse']
-        invoice_line_ids = invoice_line_obj.search(
-            cr, uid,
-            [('invoice_id', '=', invoice_id)],
-            context=context)
-        claim_lines = []
-        value = {}
+    def onchange_order_id(self, cr, uid, ids, order_id, warehouse_id,
+                          context=None):
+        sale_obj = self.pool['sale.order']
+        result = {'value': defaultdict(list),
+                  'domain': defaultdict(list)}
+        if not order_id:
+            return result
         if not warehouse_id:
             warehouse_id = self._get_default_warehouse(cr, uid,
                                                        context=context)
-        invoice_lines = invoice_line_obj.browse(cr, uid, invoice_line_ids,
-                                                context=context)
+        order = sale_obj.browse(cr, uid, order_id, context=context)
+        if order.invoice_ids:
+            for line in order.invoice_ids[0].invoice_line:
+                result['value']['claim_line_ids'].append(self._line_from_record(
+                    cr, uid, line, warehouse_id, context=context))
+            result['value']['invoice_id'] = order.invoice_ids[0].id
+            #update domain to have only invoices from the selected sale order
+            result['domain']['invoice_id'] = [('id', 'in',
+                                               [x.id for x in order.invoice_ids])]
+        else:
+            for line in order.order_line:
+                result['value']['claim_line_ids'].append(self._line_from_record(
+                    cr, uid, line, warehouse_id, context=context))
+        delivery_address_id = order.partner_shipping_id.id
+        result['value']['delivery_address_id'] = delivery_address_id
+        return result
 
-        def warranty_values(invoice, product):
-            values = {}
-            try:
-                warranty = claim_line_obj._warranty_limit_values(
-                    cr, uid, [], invoice,
-                    claim_type, product,
-                    claim_date, context=context)
-            except (InvoiceNoDate, ProductNoSupplier):
-                # we don't mind at this point if the warranty can't be
-                # computed and we don't want to block the user
-                values.update({'guarantee_limit': False, 'warning': False})
-            else:
-                values.update(warranty)
-            company = company_obj.browse(cr, uid, company_id, context=context)
-            warehouse = warehouse_obj.browse(cr, uid, warehouse_id,
-                                             context=context)
-            warranty_address = claim_line_obj._warranty_return_address_values(
-                cr, uid, [], product, company,
-                warehouse, context=context)
-            values.update(warranty_address)
-            return values
+    def _line_from_record(self, cr, uid, line, warehouse_id, context=None):
+        claim_line_obj = self.pool['claim.line']
+        product_id = line.product_id and line.product_id.id or False
+        location_dest_id = claim_line_obj.get_destination_location(
+            cr, uid, product_id, warehouse_id, context=context)
+        claim_line = {
+            'name': line.name,
+            'claim_origine': 'none',
+            'product_id': product_id,
+            'unit_sale_price': line.price_unit,
+            'location_dest_id': location_dest_id,
+            'state': 'draft',
+            }
+        if line._model._name == 'account.invoice.line':
+            claim_line.update({
+                'invoice_line_id': line.id,
+                'product_returned_quantity': line.quantity
+                })
+        elif line._model._name == 'sale.order.line':
+            claim_line.update({
+                'order_line_id': line.id,
+                'product_returned_quantity': line.product_uom_qty
+                })
+        return claim_line
 
-        if create_lines:  # happens when the invoice is changed
-            for invoice_line in invoice_lines:
-                location_dest_id = claim_line_obj.get_destination_location(
-                    cr, uid, invoice_line.product_id.id,
-                    warehouse_id, context=context)
-                line = {
-                    'name': invoice_line.name,
-                    'claim_origine': "none",
-                    'invoice_line_id': invoice_line.id,
-                    'product_id': invoice_line.product_id.id,
-                    'product_returned_quantity': invoice_line.quantity,
-                    'unit_sale_price': invoice_line.price_unit,
-                    'location_dest_id': location_dest_id,
-                    'state': 'draft',
+    def onchange_invoice_id(self, cr, uid, ids, invoice_id, warehouse_id,
+                            state, context=None):
+        invoice_obj = self.pool['account.invoice']
+        value = defaultdict(list)
+        if not invoice_id:
+            return value
+        if state not in ['draft', False]:
+            warning = {
+                'title': _('Invoice Warning!'),
+                'message' : _('Claims lines can be updated from invoice only '
+                              'when the claim is draft. If you want to change '
+                              'them, create a new claim.')
                 }
-                line.update(warranty_values(invoice_line.invoice_id,
-                                            invoice_line.product_id))
-                claim_lines.append(line)
-        elif lines:  # happens when the date, warehouse or claim type is
-                     # modified
-            for command in lines:
-                code = command[0]
-                assert code != 6, "command 6 not supported in on_change"
-                if code in (0, 1, 4):
-                    # 0: link a new record with values
-                    # 1: update an existing record with values
-                    # 4: link to existing record
-                    line_id = command[1]
-                    if code == 4:
-                        code = 1  # we want now to update values
-                        values = {}
-                    else:
-                        values = command[2]
-                    invoice_line_id = values.get('invoice_line_id')
-                    product_id = values.get('product_id')
-                    if code == 1:  # get the existing line
-                        # if the fields have not changed, fallback
-                        # on the database values
-                        browse_line = claim_line_obj.read(cr, uid,
-                                                          line_id,
-                                                          ['invoice_line_id',
-                                                           'product_id'],
-                                                          context=context)
-                        if not invoice_line_id:
-                            invoice_line_id = browse_line['invoice_line_id'][0]
-                        if not product_id:
-                            product_id = browse_line['product_id'][0]
-
-                    if invoice_line_id and product_id:
-                        invoice_line = invoice_line_obj.browse(cr, uid,
-                                                               invoice_line_id,
-                                                               context=context)
-                        product = product_obj.browse(cr, uid, product_id,
-                                                     context=context)
-                        values.update(warranty_values(invoice_line.invoice_id,
-                                                      product))
-                    claim_lines.append((code, line_id, values))
-                elif code in (2, 3, 5):
-                    claim_lines.append(command)
-
-        value = {'claim_line_ids': claim_lines}
-        delivery_address_id = False
-        if invoice_id:
-            invoice = invoice_obj.browse(cr, uid, invoice_id, context=context)
-            delivery_address_id = invoice.partner_id.id
-        value['delivery_address_id'] = delivery_address_id
-
+            return {'warning': warning}
+        if not warehouse_id:
+            warehouse_id = self._get_default_warehouse(cr, uid,
+                                                       context=context)
+        invoice = invoice_obj.browse(cr, uid, invoice_id, context=context)
+        for line in invoice.invoice_line:
+            value['claim_line_ids'].append(self._line_from_record(
+                cr, uid, line, warehouse_id, context=context))
         return {'value': value}
 
     def message_get_reply_to(self, cr, uid, ids, context=None):

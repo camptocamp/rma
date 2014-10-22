@@ -168,8 +168,16 @@
                         <separator string="Product Return" colspan="4"/>
                         <group>
                             <field name="company_id" invisible="1"/>
-                            <field name="invoice_id" on_change="onchange_invoice_id(invoice_id, warehouse_id, claim_type, date, company_id, claim_line_ids, True, context)" domain="['|',('commercial_partner_id','=',partner_id),('partner_id','=',partner_id)]" />
-                            <field name="delivery_address_id" context="{'tree_view_ref': 'crm_claim_rma.view_partner_contact_tree', 'search_default_parent_id': partner_id}"/>
+                            <field name="order_id"
+                                on_change="onchange_order_id(order_id, warehouse_id, context)"
+                                domain="[('partner_id', '=', partner_id)]"
+                                attrs="{'invisible': [('partner_id', '=', False)], 'readonly': [('state', 'in', ['cancel', 'open', 'pending', 'done'])]}"/>
+                            <field name="invoice_id"
+                                on_change="onchange_invoice_id(invoice_id,warehouse_id,state,context)"
+                                domain="['|',('commercial_partner_id','=',partner_id),('partner_id','=',partner_id)]"
+                                attrs="{'invisible': [('order_id', '=', False)]}"/>
+                            <field name="delivery_address_id"
+                                context="{'tree_view_ref': 'crm_claim_rma.view_partner_contact_tree', 'search_default_parent_id': partner_id}"/>
                         </group>
                         <group>
                             <!-- Place for mass return button from crm_rma_lot_mass_return -->
