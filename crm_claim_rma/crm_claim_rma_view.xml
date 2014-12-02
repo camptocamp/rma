@@ -175,16 +175,33 @@
                             <!-- Place for mass return button from crm_rma_lot_mass_return -->
                         </group>
                         <field name="claim_line_ids" nolabel="1" colspan="4" editable="top">
+                            <tree string="Claim Line">
+                                <field name="claim_id" invisible="1"/>
+                                <field name="state"/>
+                                <field name="product_id"/>
+                                <field name="prodlot_id"/>
+                                <field name="warning"/>
+                                <field name="warranty_type"/>
+                                <field name="warranty_return_partner"/>
+                                <button name="set_warranty" string="Compute Waranty" type="object" icon="gtk-justify-fill"/>
+                                <field name="product_returned_quantity"/>
+                                <field name="refund_line_id" invisible="1"/>
+                                <field name="move_in_id" invisible="1"/>
+                                <field name="move_out_id" invisible="1"/>
+                                <field name="move_in_state"/>
+                                <field name="move_out_state"/>
+                                <field name="refund_state"/>
+                            </tree>
                             <form string="Claim Line" version="7.0">
                                 <header>
                                     <button name="set_warranty" string="Calculate warranty state" type="object" class="oe_highlight"/>
                                 </header>
                                 <sheet string="Claims">
                                     <div class="oe_title">
-                                            <group>
-                                                <label for="name" class="oe_edit_only"/>
-                                                <h1><field name="name"/></h1>
-                                            </group>
+                                        <group>
+                                            <label for="name" class="oe_edit_only"/>
+                                            <h1><field name="name"/></h1>
+                                        </group>
                                     </div>
                                     <group>
                                         <group string="Returned good">
