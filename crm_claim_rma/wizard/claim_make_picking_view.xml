@@ -16,7 +16,7 @@
                     <field name="claim_line_source_location" nolabel="1" />
                     <field name="claim_line_dest_location" nolabel="1" />
                     <separator string="Select lines for picking" colspan="4"/>
-                    <field name="claim_line_ids" nolabel="1" colspan="4"/>
+                    <field name="wizard_line_ids" nolabel="1" colspan="4"/>
                     <footer>
                         <button name="action_create_picking" string="Create picking" type="object" class="oe_highlight"/>
                         or
@@ -24,7 +24,19 @@
                     </footer>
                 </form>
             </field>
-        </record> 
+        </record>
+
+        <record id="claim_picking_line_tree" model="ir.ui.view">
+            <field name="name">claim.picking.line.tree</field>
+            <field name="model">claim.make.picking.line</field>
+            <field name="arch" type="xml">
+                <tree editable="bottom" string="Wizard lines">
+                    <field name="product_id"/>
+                    <field name="new_product_id"/>
+                    <field name="product_qty"/>
+                </tree>
+            </field>
+        </record>
 
         <record id="action_claim_picking_in" model="ir.actions.act_window">
             <field name="name">Return Products</field>
@@ -33,7 +45,7 @@
             <field name="src_model">crm.claim</field>
             <field name="view_type">form</field>
             <field name="view_mode">form</field>
-            <field name="target">new</field> 
+            <field name="target">new</field>
             <field name="context">{'picking_type': 'in','product_return': True}</field>
         </record>
 
