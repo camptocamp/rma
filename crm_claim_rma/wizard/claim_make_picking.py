@@ -324,7 +324,7 @@ class claim_make_picking(orm.TransientModel):
             if wizard_line.new_product_id:
                 product = wizard_line.new_product_id
             else:
-                product = wizard_line.product_id,
+                product = wizard_line.product_id
             if product.type not in ['consu', 'product']:
                 continue
             move_id = self._create_move(
