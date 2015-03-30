@@ -447,12 +447,14 @@ class claim_line(orm.Model):
     def set_warranty(self, cr, uid, ids, context=None):
         """ Calculate warranty limit and address """
         for claim_line in self.browse(cr, uid, ids, context=context):
-            if not (claim_line.product_id and claim_line.invoice_line_id):
+            if not (claim_line.product_id and (claim_line.invoice_line_id,
+                claim_line.order_line_id)):
                 raise orm.except_orm(
                     _('Error !'),
                     _('Please set product and invoice.'))
-            self.set_warranty_limit(cr, uid, ids,
-                                    claim_line, context=context)
+            if claim_line.invoice_line_id:
+                self.set_warranty_limit(cr, uid, ids,
+                                        claim_line, context=context)
             self.set_warranty_return_address(cr, uid, ids,
                                              claim_line, context=context)
         return True
@@ -569,6 +571,16 @@ class crm_claim(orm.Model):
          'Number/Reference must be unique per Company!'),
     ]
 
+    def onchange_partner_id(self, cr, uid, ids, partner_id, email=False):
+        res = super(crm_claim, self).onchange_partner_id(cr, uid, ids,
+                                                         partner_id,
+                                                         email=email)
+        res['domain'] = {}
+        if not partner_id:
+            return res
+        res['domain']['order_id'] = [('partner_id', '=', partner_id)]
+        return res
+
     def onchange_partner_address_id(self, cr, uid, ids, add, email=False,
                                     context=None):
         res = super(crm_claim, self
@@ -587,7 +599,7 @@ class crm_claim(orm.Model):
         return res
 
     def onchange_order_id(self, cr, uid, ids, order_id, warehouse_id,
-                          context=None):
+                          partner_id, context=None):
         sale_obj = self.pool['sale.order']
         result = {'value': defaultdict(list),
                   'domain': defaultdict(list)}
@@ -611,6 +623,8 @@ class crm_claim(orm.Model):
                     cr, uid, line, warehouse_id, context=context))
         delivery_address_id = order.partner_shipping_id.id
         result['value']['delivery_address_id'] = delivery_address_id
+        if not partner_id:
+            result['value']['partner_id'] = order.partner_id.id
         return result
 
     def _line_from_record(self, cr, uid, line, warehouse_id, context=None):

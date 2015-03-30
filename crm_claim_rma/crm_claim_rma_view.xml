@@ -169,8 +169,7 @@
                         <group>
                             <field name="company_id" invisible="1"/>
                             <field name="order_id"
-                                on_change="onchange_order_id(order_id, warehouse_id, context)"
-                                domain="[('partner_id', '=', partner_id)]"
+                                on_change="onchange_order_id(order_id, warehouse_id, partner_id, context)"
                                 attrs="{'invisible': [('partner_id', '=', False)], 'readonly': [('state', 'in', ['cancel', 'open', 'pending', 'done'])]}"/>
                             <field name="invoice_id"
                                 on_change="onchange_invoice_id(invoice_id,warehouse_id,state,context)"
