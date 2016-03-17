@@ -610,9 +610,12 @@ class crm_claim(orm.Model):
                                                        context=context)
         order = sale_obj.browse(cr, uid, order_id, context=context)
         if order.invoice_ids:
-            for line in order.invoice_ids[0].invoice_line:
-                result['value']['claim_line_ids'].append(self._line_from_record(
-                    cr, uid, line, warehouse_id, context=context))
+            for invoice in order.invoice_ids:
+                if invoice.type == 'out_invoice':
+                    for line in invoice.invoice_line:
+                        result['value']['claim_line_ids'].append(
+                            self._line_from_record(
+                                cr, uid, line, warehouse_id, context=context))
             result['value']['invoice_id'] = order.invoice_ids[0].id
             #update domain to have only invoices from the selected sale order
             result['domain']['invoice_id'] = [('id', 'in',
