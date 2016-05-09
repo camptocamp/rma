@@ -1,11 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <openerp>
     <data noupdate="1">
-        <record id="seq_type_claim" model="ir.sequence.type">
-            <field name="name">CRM Claim</field>
-            <field name="code">crm.claim.rma</field>
-        </record>
-
         <record id="seq_claim" model="ir.sequence">
             <field name="name">CRM Claim</field>
             <field name="code">crm.claim.rma</field>
